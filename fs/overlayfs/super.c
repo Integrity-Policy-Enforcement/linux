@@ -30,12 +30,14 @@ struct ovl_dir_cache;
 
 static struct dentry *ovl_d_real(struct dentry *dentry, enum d_real_type type)
 {
+	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);
 	struct dentry *upper, *lower;
 	int err;
 
 	switch (type) {
 	case D_REAL_DATA:
 	case D_REAL_METADATA:
+	case D_REAL_METADATA_FOR_VERIFIED_DATA:
 		break;
 	default:
 		goto bug;
@@ -46,12 +48,23 @@ static struct dentry *ovl_d_real(struct dentry *dentry, enum d_real_type type)
 		return dentry;
 	}
 
+	/*
+	 * Only verity=require guarantees that metacopy data is checked
+	 * against the fs-verity digest stored in its metadata.
+	 */
+	if (type == D_REAL_METADATA_FOR_VERIFIED_DATA &&
+	    ovl_is_metacopy_dentry(dentry) &&
+	    ofs->config.verity_mode != OVL_VERITY_REQUIRE)
+		return NULL;
+
 	upper = ovl_dentry_upper(dentry);
 	if (upper && (type == D_REAL_METADATA ||
+		      type == D_REAL_METADATA_FOR_VERIFIED_DATA ||
 		      ovl_has_upperdata(d_inode(dentry))))
 		return upper;
 
-	if (type == D_REAL_METADATA) {
+	if (type == D_REAL_METADATA ||
+	    type == D_REAL_METADATA_FOR_VERIFIED_DATA) {
 		lower = ovl_dentry_lower(dentry);
 		goto real_lower;
 	}

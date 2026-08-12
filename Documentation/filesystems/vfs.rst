@@ -1374,6 +1374,10 @@ defined:
 	for returning the real underlying dentry that refers to the inode
 	hosting the file's data or metadata respectively.
 
+	D_REAL_METADATA_FOR_VERIFIED_DATA returns the metadata dentry only
+	if the filesystem guarantees that the file's data is bound to that
+	metadata. Otherwise, it returns NULL.
+
 	For non-regular files, the 'dentry' argument is returned.
 
 ``d_unalias_trylock``

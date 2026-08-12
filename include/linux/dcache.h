@@ -155,6 +155,7 @@ enum dentry_d_lock_class
 enum d_real_type {
 	D_REAL_DATA,
 	D_REAL_METADATA,
+	D_REAL_METADATA_FOR_VERIFIED_DATA,
 };
 
 struct dentry_operations {
@@ -596,7 +597,7 @@ static inline struct inode *d_backing_inode(const struct dentry *upper)
 /**
  * d_real - Return the real dentry
  * @dentry: the dentry to query
- * @type: the type of real dentry (data or metadata)
+ * @type: the type of real dentry (data, metadata, metadata for verified data)
  *
  * If dentry is on a union/overlay, then return the underlying, real dentry.
  * Otherwise return the dentry itself.

@@ -287,28 +287,14 @@ int ipe_bdev_setintegrity(struct block_device *bdev, enum lsm_integrity_type typ
 	}
 	digest = value;
 
-	info = kzalloc_obj(*info);
-	if (!info)
-		return -ENOMEM;
-
-	info->digest = kmemdup(digest->digest, digest->digest_len, GFP_KERNEL);
-	if (!info->digest)
-		goto err;
-
-	info->alg = kstrdup(digest->alg, GFP_KERNEL);
-	if (!info->alg)
-		goto err;
-
-	info->digest_len = digest->digest_len;
+	info = ipe_digest_new(digest->alg, digest->digest, digest->digest_len);
+	if (IS_ERR(info))
+		return PTR_ERR(info);
 
 	ipe_digest_free(blob->root_hash);
 	blob->root_hash = info;
 
 	return 0;
-err:
-	ipe_digest_free(info);
-
-	return -ENOMEM;
 }
 #endif /* CONFIG_IPE_PROP_DM_VERITY */
 

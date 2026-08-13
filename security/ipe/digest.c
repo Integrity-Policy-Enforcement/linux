@@ -73,6 +73,42 @@ err:
 }
 
 /**
+ * ipe_digest_new() - create a digest from raw bytes.
+ * @alg: Supplies the digest algorithm name.
+ * @digest: Supplies the raw digest bytes.
+ * @digest_len: Supplies the number of bytes in @digest.
+ *
+ * Return: The new digest_info structure on success. If an error occurs,
+ * the function will return the error value (via ERR_PTR).
+ */
+struct digest_info *ipe_digest_new(const char *alg, const u8 *digest,
+				   size_t digest_len)
+{
+	struct digest_info *info = NULL;
+
+	info = kzalloc_obj(*info);
+	if (!info)
+		return ERR_PTR(-ENOMEM);
+
+	info->digest = kmemdup(digest, digest_len, GFP_KERNEL);
+	if (!info->digest)
+		goto err;
+
+	info->alg = kstrdup(alg, GFP_KERNEL);
+	if (!info->alg)
+		goto err;
+
+	info->digest_len = digest_len;
+
+	return info;
+
+err:
+	ipe_digest_free(info);
+
+	return ERR_PTR(-ENOMEM);
+}
+
+/**
  * ipe_digest_eval() - evaluate an IPE digest against another digest.
  * @expected: Supplies the policy-provided digest value.
  * @digest: Supplies the digest to compare against the policy digest value.

@@ -281,6 +281,14 @@ static const match_table_t property_tokens = {
 	{IPE_PROP_FSV_DIGEST,		"fsverity_digest=%s"},
 	{IPE_PROP_FSV_SIG_FALSE,	"fsverity_signature=FALSE"},
 	{IPE_PROP_FSV_SIG_TRUE,		"fsverity_signature=TRUE"},
+	{IPE_PROP_METADATA_BACKING_FSV_DIGEST,
+					"metadata_backing_file_fsverity_digest=%s"},
+	{IPE_PROP_METADATA_BACKING_DMV_ROOTHASH,
+					"metadata_backing_file_dmverity_roothash=%s"},
+	{IPE_PROP_METADATA_BACKING_DMV_SIG_FALSE,
+					"metadata_backing_file_dmverity_signature=FALSE"},
+	{IPE_PROP_METADATA_BACKING_DMV_SIG_TRUE,
+					"metadata_backing_file_dmverity_signature=TRUE"},
 	{IPE_PROP_INVALID,		NULL}
 };
 
@@ -314,6 +322,8 @@ static int parse_property(char *t, struct ipe_rule *r)
 	switch (token) {
 	case IPE_PROP_DMV_ROOTHASH:
 	case IPE_PROP_FSV_DIGEST:
+	case IPE_PROP_METADATA_BACKING_FSV_DIGEST:
+	case IPE_PROP_METADATA_BACKING_DMV_ROOTHASH:
 		dup = match_strdup(&args[0]);
 		if (!dup) {
 			rc = -ENOMEM;
@@ -331,6 +341,8 @@ static int parse_property(char *t, struct ipe_rule *r)
 	case IPE_PROP_DMV_SIG_TRUE:
 	case IPE_PROP_FSV_SIG_FALSE:
 	case IPE_PROP_FSV_SIG_TRUE:
+	case IPE_PROP_METADATA_BACKING_DMV_SIG_FALSE:
+	case IPE_PROP_METADATA_BACKING_DMV_SIG_TRUE:
 		p->type = token;
 		break;
 	default:

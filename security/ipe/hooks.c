@@ -340,3 +340,35 @@ int ipe_inode_setintegrity(const struct inode *inode,
 	return -EINVAL;
 }
 #endif /* CONFIG_IPE_PROP_FS_VERITY_BUILTIN_SIG */
+
+#ifdef CONFIG_IPE_PROP_METADATA_BACKING_FILE
+/**
+ * ipe_sb_set_backing_file() - Save the backing file in IPE's superblock blob.
+ * @sb: filesystem superblock
+ * @backing_file: backing file, or %NULL to clear
+ *
+ * Return: %0.
+ */
+int ipe_sb_set_backing_file(struct super_block *sb, struct file *backing_file)
+{
+	struct ipe_superblock *blob = ipe_sb(sb);
+
+	if (blob->backing_file)
+		fput(blob->backing_file);
+	blob->backing_file = backing_file ? get_file(backing_file) : NULL;
+
+	return 0;
+}
+
+/**
+ * ipe_sb_free_security() - Release the backing file reference.
+ * @sb: superblock being freed
+ */
+void ipe_sb_free_security(struct super_block *sb)
+{
+	struct ipe_superblock *blob = ipe_sb(sb);
+
+	if (blob->backing_file)
+		fput(blob->backing_file);
+}
+#endif /* CONFIG_IPE_PROP_METADATA_BACKING_FILE */

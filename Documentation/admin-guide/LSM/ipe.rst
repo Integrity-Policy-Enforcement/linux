@@ -559,7 +559,10 @@ policy. Two properties are built-into the policy parser: 'op' and 'action'.
 The other properties are used to restrict immutable security properties
 about the files being evaluated. Currently those properties are:
 '``boot_verified``', '``dmverity_signature``', '``dmverity_roothash``',
-'``fsverity_signature``', '``fsverity_digest``'. A description of all
+'``fsverity_signature``', '``fsverity_digest``',
+'``metadata_backing_file_fsverity_digest``',
+'``metadata_backing_file_dmverity_roothash``',
+'``metadata_backing_file_dmverity_signature``'. A description of all
 properties supported by IPE are listed below:
 
 op
@@ -713,6 +716,59 @@ fsverity_signature
 
       fsverity_signature=(TRUE|FALSE)
 
+metadata_backing_file_fsverity_digest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   This property matches the fs-verity digest of the file backing the
+   filesystem that holds the evaluated file's metadata.
+
+   It supports file-backed EROFS, directly or through overlayfs.
+   For overlayfs metacopy files, this property requires ``verity=require``.
+
+   ``IPE_PROP_METADATA_BACKING_FS_VERITY`` is selected when
+   ``SECURITY_IPE`` and ``FS_VERITY`` are enabled. The format is::
+
+      metadata_backing_file_fsverity_digest=DigestName:HexadecimalString
+
+   DigestName is ``sha256`` or ``sha512``.
+
+metadata_backing_file_dmverity_roothash
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   This property checks the file backing the filesystem that holds the
+   evaluated file's metadata. It matches when the backing file is on a
+   dm-verity volume with the root hash specified in the policy.
+
+   It supports file-backed EROFS, directly or through overlayfs.
+   For overlayfs metacopy files, this property requires ``verity=require``.
+
+   ``IPE_PROP_METADATA_BACKING_DM_VERITY`` is selected when
+   ``SECURITY_IPE`` and ``DM_VERITY`` are enabled. The format is::
+
+      metadata_backing_file_dmverity_roothash=DigestName:HexadecimalString
+
+   DigestName is the hash algorithm used by the dm-verity volume.
+
+metadata_backing_file_dmverity_signature
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   This property checks the file backing the filesystem that holds the
+   evaluated file's metadata. ``TRUE`` matches when the backing file is
+   on a dm-verity volume with a verified root hash signature.
+
+   It supports file-backed EROFS, directly or through overlayfs.
+   For overlayfs metacopy files, ``TRUE`` requires ``verity=require``.
+
+   ``FALSE`` matches when no verified signature is available, including
+   when no metadata backing file is found. If this property is disabled
+   in Kconfig, neither ``TRUE`` nor ``FALSE`` matches.
+
+   ``IPE_PROP_METADATA_BACKING_DM_VERITY_SIGNATURE`` is selected when
+   ``SECURITY_IPE``, ``DM_VERITY`` and ``DM_VERITY_VERIFY_ROOTHASH_SIG``
+   are enabled. The format is::
+
+      metadata_backing_file_dmverity_signature=(TRUE|FALSE)
+
 Policy Examples
 ---------------
 
@@ -787,6 +843,39 @@ Allow execution of a specific fs-verity file
    DEFAULT action=DENY
 
    op=EXECUTE fsverity_digest=sha256:fd88f2b8824e197f850bf4c5109bea5cf0ee38104f710843bb72da796ba5af9e action=ALLOW
+
+Allow execution from a specific metadata image
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+   policy_name=Allow_Metadata_Backing_By_Digest policy_version=0.0.0
+   DEFAULT action=DENY
+
+   op=EXECUTE boot_verified=TRUE action=ALLOW
+   op=EXECUTE metadata_backing_file_fsverity_digest=sha256:f38fbe6a7247eb09329384259a8eda56933a44d29b197b2191b37e4cb2a8d5de action=ALLOW
+
+Allow execution from a metadata image on a dm-verity volume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+   policy_name=Allow_Metadata_Backing_By_Roothash policy_version=0.0.0
+   DEFAULT action=DENY
+
+   op=EXECUTE boot_verified=TRUE action=ALLOW
+   op=EXECUTE metadata_backing_file_dmverity_roothash=sha256:cd2c5bae7c6c579edaae4353049d58eb5f2e8be0244bf05345bc8e5ed257baff action=ALLOW
+
+Allow execution from a metadata image on a signed dm-verity volume
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+   policy_name=Allow_Metadata_Backing_By_Signature policy_version=0.0.0
+   DEFAULT action=DENY
+
+   op=EXECUTE boot_verified=TRUE action=ALLOW
+   op=EXECUTE metadata_backing_file_dmverity_signature=TRUE action=ALLOW
 
 Additional Information
 ----------------------

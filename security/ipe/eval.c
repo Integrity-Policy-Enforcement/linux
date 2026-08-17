@@ -11,6 +11,7 @@
 #include <linux/rcupdate.h>
 #include <linux/moduleparam.h>
 #include <linux/fsverity.h>
+#include <linux/dcache.h>
 
 #include "ipe.h"
 #include "eval.h"
@@ -82,6 +83,42 @@ static void build_ipe_inode_ctx(struct ipe_eval_ctx *ctx, const struct inode *co
 }
 #endif /* CONFIG_IPE_PROP_FS_VERITY */
 
+#ifdef CONFIG_IPE_PROP_METADATA_BACKING_FILE
+/**
+ * ipe_metadata_backing_inode() - Find the metadata backing file's inode.
+ * @file: file being evaluated
+ *
+ * Return: the backing file's inode, or %NULL.
+ */
+static const struct inode *ipe_metadata_backing_inode(const struct file *const file)
+{
+	struct dentry *dentry = file->f_path.dentry;
+	struct file *backing;
+	struct dentry *md;
+
+	md = d_real(dentry, D_REAL_METADATA_FOR_VERIFIED_DATA);
+	if (!md)
+		return NULL;
+
+	backing = ipe_sb(md->d_sb)->backing_file;
+	if (!backing)
+		return NULL;
+
+	return file_inode(backing);
+}
+
+static void build_ipe_metadata_ctx(struct ipe_eval_ctx *ctx,
+				   const struct file *const file)
+{
+	ctx->md_backing_ino = ipe_metadata_backing_inode(file);
+}
+#else
+static inline void build_ipe_metadata_ctx(struct ipe_eval_ctx *ctx,
+					  const struct file *const file)
+{
+}
+#endif /* CONFIG_IPE_PROP_METADATA_BACKING_FILE */
+
 /**
  * ipe_build_eval_ctx() - Build an ipe evaluation context.
  * @ctx: Supplies a pointer to the context to be populated.
@@ -105,6 +142,7 @@ void ipe_build_eval_ctx(struct ipe_eval_ctx *ctx,
 		ino = d_real_inode(file->f_path.dentry);
 		build_ipe_bdev_ctx(ctx, ino);
 		build_ipe_inode_ctx(ctx, ino);
+		build_ipe_metadata_ctx(ctx, file);
 	}
 }
 
@@ -265,6 +303,108 @@ static bool evaluate_fsv_sig_true(const struct ipe_eval_ctx *const ctx)
 }
 #endif /* CONFIG_IPE_PROP_FS_VERITY_BUILTIN_SIG */
 
+#ifdef CONFIG_IPE_PROP_METADATA_BACKING_FS_VERITY
+/**
+ * evaluate_md_backing_fsv_digest() - Match the backing file's fs-verity digest.
+ * @ctx: evaluation context
+ * @p: digest property
+ *
+ * Return: %true if the digest matches, %false otherwise.
+ */
+static bool evaluate_md_backing_fsv_digest(const struct ipe_eval_ctx *const ctx,
+					   struct ipe_prop *p)
+{
+	enum hash_algo alg;
+	u8 digest[FS_VERITY_MAX_DIGEST_SIZE];
+	struct digest_info info;
+
+	if (!ctx->md_backing_ino)
+		return false;
+	if (!fsverity_get_digest((struct inode *)ctx->md_backing_ino,
+				 digest,
+				 NULL,
+				 &alg))
+		return false;
+
+	info.alg = hash_algo_name[alg];
+	info.digest = digest;
+	info.digest_len = hash_digest_size[alg];
+
+	return ipe_digest_eval(p->value, &info);
+}
+#else
+static bool evaluate_md_backing_fsv_digest(const struct ipe_eval_ctx *const ctx,
+					   struct ipe_prop *p)
+{
+	return false;
+}
+#endif /* CONFIG_IPE_PROP_METADATA_BACKING_FS_VERITY */
+
+#ifdef CONFIG_IPE_PROP_METADATA_BACKING_DM_VERITY
+/**
+ * evaluate_md_backing_dmv_roothash() - Match the backing volume's root hash.
+ * @ctx: evaluation context
+ * @p: root hash property
+ *
+ * Return: %true if the root hash matches, %false otherwise.
+ */
+static bool evaluate_md_backing_dmv_roothash(const struct ipe_eval_ctx *const ctx,
+					     struct ipe_prop *p)
+{
+	const struct ipe_bdev *blob;
+
+	if (!ctx->md_backing_ino || !INO_BLOCK_DEV(ctx->md_backing_ino))
+		return false;
+
+	blob = ipe_bdev(INO_BLOCK_DEV(ctx->md_backing_ino));
+	return !!blob->root_hash &&
+	       ipe_digest_eval(p->value, blob->root_hash);
+}
+#else
+static bool evaluate_md_backing_dmv_roothash(const struct ipe_eval_ctx *const ctx,
+					     struct ipe_prop *p)
+{
+	return false;
+}
+#endif /* CONFIG_IPE_PROP_METADATA_BACKING_DM_VERITY */
+
+#ifdef CONFIG_IPE_PROP_METADATA_BACKING_DM_VERITY_SIGNATURE
+/**
+ * evaluate_md_backing_dmv_sig_true() - Evaluate the signature TRUE property.
+ * @ctx: evaluation context
+ *
+ * Return: %true if the backing volume has a verified root hash signature.
+ */
+static bool evaluate_md_backing_dmv_sig_true(const struct ipe_eval_ctx *const ctx)
+{
+	if (!ctx->md_backing_ino || !INO_BLOCK_DEV(ctx->md_backing_ino))
+		return false;
+
+	return ipe_bdev(INO_BLOCK_DEV(ctx->md_backing_ino))->dm_verity_signed;
+}
+
+/**
+ * evaluate_md_backing_dmv_sig_false() - Evaluate the signature FALSE property.
+ * @ctx: evaluation context
+ *
+ * Return: %true if no verified backing volume signature is available.
+ */
+static bool evaluate_md_backing_dmv_sig_false(const struct ipe_eval_ctx *const ctx)
+{
+	return !evaluate_md_backing_dmv_sig_true(ctx);
+}
+#else
+static bool evaluate_md_backing_dmv_sig_true(const struct ipe_eval_ctx *const ctx)
+{
+	return false;
+}
+
+static bool evaluate_md_backing_dmv_sig_false(const struct ipe_eval_ctx *const ctx)
+{
+	return false;
+}
+#endif /* CONFIG_IPE_PROP_METADATA_BACKING_DM_VERITY_SIGNATURE */
+
 /**
  * evaluate_property() - Analyze @ctx against a rule property.
  * @ctx: Supplies a pointer to the context to be evaluated.
@@ -297,6 +437,14 @@ static bool evaluate_property(const struct ipe_eval_ctx *const ctx,
 		return evaluate_fsv_sig_false(ctx);
 	case IPE_PROP_FSV_SIG_TRUE:
 		return evaluate_fsv_sig_true(ctx);
+	case IPE_PROP_METADATA_BACKING_FSV_DIGEST:
+		return evaluate_md_backing_fsv_digest(ctx, p);
+	case IPE_PROP_METADATA_BACKING_DMV_ROOTHASH:
+		return evaluate_md_backing_dmv_roothash(ctx, p);
+	case IPE_PROP_METADATA_BACKING_DMV_SIG_FALSE:
+		return evaluate_md_backing_dmv_sig_false(ctx);
+	case IPE_PROP_METADATA_BACKING_DMV_SIG_TRUE:
+		return evaluate_md_backing_dmv_sig_true(ctx);
 	default:
 		return false;
 	}

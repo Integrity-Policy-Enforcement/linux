@@ -20,6 +20,9 @@ extern bool enforce;
 
 struct ipe_superblock {
 	bool initramfs;
+#ifdef CONFIG_IPE_PROP_METADATA_BACKING_FILE
+	struct file *backing_file;
+#endif /* CONFIG_IPE_PROP_METADATA_BACKING_FILE */
 };
 
 #ifdef CONFIG_IPE_PROP_DM_VERITY
@@ -52,6 +55,9 @@ struct ipe_eval_ctx {
 #ifdef CONFIG_IPE_PROP_FS_VERITY_BUILTIN_SIG
 	const struct ipe_inode *ipe_inode;
 #endif /* CONFIG_IPE_PROP_FS_VERITY_BUILTIN_SIG */
+#ifdef CONFIG_IPE_PROP_METADATA_BACKING_FILE
+	const struct inode *md_backing_ino;
+#endif /* CONFIG_IPE_PROP_METADATA_BACKING_FILE */
 };
 
 enum ipe_match {

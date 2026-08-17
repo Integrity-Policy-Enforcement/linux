@@ -52,4 +52,10 @@ int ipe_inode_setintegrity(const struct inode *inode, enum lsm_integrity_type ty
 			   const void *value, size_t size);
 #endif /* CONFIG_IPE_PROP_FS_VERITY_BUILTIN_SIG */
 
+#ifdef CONFIG_IPE_PROP_METADATA_BACKING_FILE
+int ipe_sb_set_backing_file(struct super_block *sb, struct file *backing_file);
+
+void ipe_sb_free_security(struct super_block *sb);
+#endif /* CONFIG_IPE_PROP_METADATA_BACKING_FILE */
+
 #endif /* _IPE_HOOKS_H */

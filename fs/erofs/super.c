@@ -12,6 +12,7 @@
 #include <linux/exportfs.h>
 #include <linux/backing-dev.h>
 #include <linux/pseudo_fs.h>
+#include <linux/security.h>
 #include "xattr.h"
 
 #define CREATE_TRACE_POINTS
@@ -788,6 +789,12 @@ static int erofs_fc_fill_super(struct super_block *sb, struct fs_context *fc)
 	err = erofs_register_sysfs(sb);
 	if (err)
 		return err;
+
+	if (erofs_is_fileio_mode(sbi)) {
+		err = security_sb_set_backing_file(sb, sbi->dif0.file);
+		if (err)
+			return err;
+	}
 
 	sbi->dir_ra_bytes = EROFS_DIR_RA_BYTES;
 	erofs_info(sb, "mounted with root inode @ nid %llu.", sbi->root_nid);

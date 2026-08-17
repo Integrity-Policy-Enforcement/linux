@@ -1038,6 +1038,23 @@ int security_sb_kern_mount(const struct super_block *sb)
 }
 
 /**
+ * security_sb_set_backing_file() - Notify LSMs of a filesystem's backing file
+ * @sb: filesystem superblock
+ * @backing_file: backing file, or %NULL to clear
+ *
+ * Call before @sb is visible to userspace. An LSM retaining @backing_file
+ * must take a reference and release it in its sb_free_security hook.
+ *
+ * Return: Returns 0 on success, negative values on failure.
+ */
+int security_sb_set_backing_file(struct super_block *sb,
+				 struct file *backing_file)
+{
+	return call_int_hook(sb_set_backing_file, sb, backing_file);
+}
+EXPORT_SYMBOL_GPL(security_sb_set_backing_file);
+
+/**
  * security_sb_show_options() - Output the mount options for a superblock
  * @m: output file
  * @sb: filesystem superblock

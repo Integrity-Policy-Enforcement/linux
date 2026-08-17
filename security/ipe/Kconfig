@@ -13,6 +13,7 @@ menuconfig SECURITY_IPE
 	select IPE_PROP_DM_VERITY_SIGNATURE if DM_VERITY && DM_VERITY_VERIFY_ROOTHASH_SIG
 	select IPE_PROP_FS_VERITY if FS_VERITY
 	select IPE_PROP_FS_VERITY_BUILTIN_SIG if FS_VERITY && FS_VERITY_BUILTIN_SIGNATURES
+	select IPE_PROP_METADATA_BACKING_FS_VERITY if FS_VERITY
 	help
 	  This option enables the Integrity Policy Enforcement LSM
 	  allowing users to define a policy to enforce a trust-based access
@@ -92,6 +93,16 @@ config IPE_PROP_FS_VERITY_BUILTIN_SIG
 	  policies. The property evaluates to TRUE when a file is fsverity
 	  enabled and it has a valid builtin signature whose signing cert
 	  is in the .fs-verity keyring.
+
+	  if unsure, answer Y.
+
+config IPE_PROP_METADATA_BACKING_FS_VERITY
+	bool "Enable support for a metadata backing file's fs-verity digest"
+	depends on FS_VERITY
+	help
+	  Enable 'metadata_backing_file_fsverity_digest' to match the
+	  fs-verity digest of the file backing the filesystem that holds
+	  the evaluated file's metadata.
 
 	  if unsure, answer Y.
 

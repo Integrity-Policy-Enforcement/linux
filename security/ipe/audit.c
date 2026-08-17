@@ -62,6 +62,7 @@ static const char *const audit_prop_names[__IPE_PROP_MAX] = {
 	[IPE_PROP_FSV_DIGEST]		= "fsverity_digest=",
 	[IPE_PROP_FSV_SIG_FALSE]	= "fsverity_signature=FALSE",
 	[IPE_PROP_FSV_SIG_TRUE]		= "fsverity_signature=TRUE",
+	[IPE_PROP_METADATA_BACKING_FSV_DIGEST] = "metadata_backing_file_fsverity_digest=",
 };
 
 /**
@@ -104,6 +105,10 @@ static void audit_rule(struct audit_buffer *ab, const struct ipe_rule *r)
 			break;
 		case IPE_PROP_FSV_DIGEST:
 			audit_fsv_digest(ab, ptr->value);
+			break;
+		case IPE_PROP_METADATA_BACKING_FSV_DIGEST:
+			audit_log_format(ab, "%s", audit_prop_names[ptr->type]);
+			ipe_digest_audit(ab, ptr->value);
 			break;
 		default:
 			audit_log_format(ab, "%s", audit_prop_names[ptr->type]);

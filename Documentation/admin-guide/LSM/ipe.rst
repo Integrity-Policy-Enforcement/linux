@@ -559,7 +559,8 @@ policy. Two properties are built-into the policy parser: 'op' and 'action'.
 The other properties are used to restrict immutable security properties
 about the files being evaluated. Currently those properties are:
 '``boot_verified``', '``dmverity_signature``', '``dmverity_roothash``',
-'``fsverity_signature``', '``fsverity_digest``'. A description of all
+'``fsverity_signature``', '``fsverity_digest``',
+'``metadata_backing_file_fsverity_digest``'. A description of all
 properties supported by IPE are listed below:
 
 op
@@ -713,6 +714,22 @@ fsverity_signature
 
       fsverity_signature=(TRUE|FALSE)
 
+metadata_backing_file_fsverity_digest
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   This property matches the fs-verity digest of the file backing the
+   filesystem that holds the evaluated file's metadata.
+
+   It supports file-backed EROFS, directly or through overlayfs.
+   For overlayfs metacopy files, this property requires ``verity=require``.
+
+   ``IPE_PROP_METADATA_BACKING_FS_VERITY`` is selected when
+   ``SECURITY_IPE`` and ``FS_VERITY`` are enabled. The format is::
+
+      metadata_backing_file_fsverity_digest=DigestName:HexadecimalString
+
+   DigestName is ``sha256`` or ``sha512``.
+
 Policy Examples
 ---------------
 
@@ -787,6 +804,17 @@ Allow execution of a specific fs-verity file
    DEFAULT action=DENY
 
    op=EXECUTE fsverity_digest=sha256:fd88f2b8824e197f850bf4c5109bea5cf0ee38104f710843bb72da796ba5af9e action=ALLOW
+
+Allow execution from a specific metadata image
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+   policy_name=Allow_Metadata_Backing_By_Digest policy_version=0.0.0
+   DEFAULT action=DENY
+
+   op=EXECUTE boot_verified=TRUE action=ALLOW
+   op=EXECUTE metadata_backing_file_fsverity_digest=sha256:f38fbe6a7247eb09329384259a8eda56933a44d29b197b2191b37e4cb2a8d5de action=ALLOW
 
 Additional Information
 ----------------------

@@ -371,6 +371,8 @@ int security_sb_eat_lsm_opts(char *options, void **mnt_opts);
 int security_sb_mnt_opts_compat(struct super_block *sb, void *mnt_opts);
 int security_sb_remount(struct super_block *sb, void *mnt_opts);
 int security_sb_kern_mount(const struct super_block *sb);
+int security_sb_set_backing_file(struct super_block *sb,
+				 struct file *backing_file);
 int security_sb_show_options(struct seq_file *m, struct super_block *sb);
 int security_sb_statfs(struct dentry *dentry);
 int security_sb_mount(const char *dev_name, const struct path *path,
@@ -799,6 +801,12 @@ static inline int security_sb_mnt_opts_compat(struct super_block *sb,
 
 
 static inline int security_sb_kern_mount(struct super_block *sb)
+{
+	return 0;
+}
+
+static inline int security_sb_set_backing_file(struct super_block *sb,
+					       struct file *backing_file)
 {
 	return 0;
 }

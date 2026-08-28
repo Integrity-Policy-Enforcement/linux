@@ -196,7 +196,7 @@ static int parse_header(char *line, struct ipe_parsed_policy *p)
  * * %false	- The token is not "DEFAULT"
  * * %true	- The token is "DEFAULT"
  */
-static bool token_default(char *token)
+static bool token_default(const char *token)
 {
 	return !strcmp(token, "DEFAULT");
 }

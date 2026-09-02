@@ -323,54 +323,51 @@ int ipe_evaluate_event(const struct ipe_eval_ctx *const ctx)
 	bool match = false;
 	int rc = 0;
 
-	rcu_read_lock();
+	scoped_guard(rcu) {
+		pol = rcu_dereference(ipe_active_policy);
+		if (!pol)
+			return 0;
 
-	pol = rcu_dereference(ipe_active_policy);
-	if (!pol) {
-		rcu_read_unlock();
-		return 0;
-	}
-
-	if (ctx->op == IPE_OP_INVALID) {
-		if (pol->parsed->global_default_action == IPE_ACTION_INVALID) {
-			WARN(1, "no default rule set for unknown op, ALLOW it");
-			action = IPE_ACTION_ALLOW;
-		} else {
-			action = pol->parsed->global_default_action;
+		if (ctx->op == IPE_OP_INVALID) {
+			if (pol->parsed->global_default_action == IPE_ACTION_INVALID) {
+				WARN(1, "no default rule set for unknown op, ALLOW it");
+				action = IPE_ACTION_ALLOW;
+			} else {
+				action = pol->parsed->global_default_action;
+			}
+			match_type = IPE_MATCH_GLOBAL;
+			goto eval;
 		}
-		match_type = IPE_MATCH_GLOBAL;
-		goto eval;
-	}
 
-	rules = &pol->parsed->rules[ctx->op];
+		rules = &pol->parsed->rules[ctx->op];
 
-	list_for_each_entry(rule, &rules->rules, next) {
-		match = true;
+		list_for_each_entry(rule, &rules->rules, next) {
+			match = true;
 
-		list_for_each_entry(prop, &rule->props, next) {
-			match = evaluate_property(ctx, prop);
-			if (!match)
+			list_for_each_entry(prop, &rule->props, next) {
+				match = evaluate_property(ctx, prop);
+				if (!match)
+					break;
+			}
+
+			if (match)
 				break;
 		}
 
-		if (match)
-			break;
-	}
-
-	if (match) {
-		action = rule->action;
-		match_type = IPE_MATCH_RULE;
-	} else if (rules->default_action != IPE_ACTION_INVALID) {
-		action = rules->default_action;
-		match_type = IPE_MATCH_TABLE;
-	} else {
-		action = pol->parsed->global_default_action;
-		match_type = IPE_MATCH_GLOBAL;
-	}
+		if (match) {
+			action = rule->action;
+			match_type = IPE_MATCH_RULE;
+		} else if (rules->default_action != IPE_ACTION_INVALID) {
+			action = rules->default_action;
+			match_type = IPE_MATCH_TABLE;
+		} else {
+			action = pol->parsed->global_default_action;
+			match_type = IPE_MATCH_GLOBAL;
+		}
 
 eval:
-	ipe_audit_match(ctx, match_type, action, rule);
-	rcu_read_unlock();
+		ipe_audit_match(ctx, match_type, action, rule);
+	}
 
 	if (action == IPE_ACTION_DENY)
 		rc = -EACCES;

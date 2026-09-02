@@ -115,16 +115,16 @@ int ipe_update_policy(struct inode *root, const char *text, size_t textlen,
 	swap(new->policyfs, old->policyfs);
 	ipe_audit_policy_load(new);
 
-	mutex_lock(&ipe_policy_lock);
-	ap = rcu_dereference_protected(ipe_active_policy,
-				       lockdep_is_held(&ipe_policy_lock));
-	if (old == ap) {
-		rcu_assign_pointer(ipe_active_policy, new);
-		mutex_unlock(&ipe_policy_lock);
-		ipe_audit_policy_activation(old, new);
-	} else {
-		mutex_unlock(&ipe_policy_lock);
+	scoped_guard(mutex, &ipe_policy_lock) {
+		ap = rcu_dereference_protected(ipe_active_policy,
+					       lockdep_is_held(&ipe_policy_lock));
+		if (old == ap)
+			rcu_assign_pointer(ipe_active_policy, new);
 	}
+
+	if (old == ap)
+		ipe_audit_policy_activation(old, new);
+
 	synchronize_rcu();
 	ipe_free_policy(old);
 	retain_and_null_ptr(new);
@@ -210,22 +210,16 @@ int ipe_set_active_pol(const struct ipe_policy *p)
 {
 	struct ipe_policy *ap = NULL;
 
-	mutex_lock(&ipe_policy_lock);
-
+	guard(mutex)(&ipe_policy_lock);
 	ap = rcu_dereference_protected(ipe_active_policy,
 				       lockdep_is_held(&ipe_policy_lock));
-	if (ap == p) {
-		mutex_unlock(&ipe_policy_lock);
+	if (ap == p)
 		return 0;
-	}
-	if (ap && ver_to_u64(ap) > ver_to_u64(p)) {
-		mutex_unlock(&ipe_policy_lock);
+	if (ap && ver_to_u64(ap) > ver_to_u64(p))
 		return -EINVAL;
-	}
 
 	rcu_assign_pointer(ipe_active_policy, p);
 	ipe_audit_policy_activation(ap, p);
-	mutex_unlock(&ipe_policy_lock);
 
 	return 0;
 }

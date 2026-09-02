@@ -3,6 +3,7 @@
  * Copyright (C) 2020-2024 Microsoft Corporation. All rights reserved.
  */
 
+#include <linux/cleanup.h>
 #include <linux/errno.h>
 #include <linux/verification.h>
 
@@ -93,8 +94,8 @@ static int set_pkcs7_data(void *ctx, const void *data, size_t len,
 int ipe_update_policy(struct inode *root, const char *text, size_t textlen,
 		      const char *pkcs7, size_t pkcs7len)
 {
-	struct ipe_policy *old, *ap, *new = NULL;
-	int rc = 0;
+	struct ipe_policy *new __free(ipe_free_policy) = NULL;
+	struct ipe_policy *old, *ap;
 
 	old = (struct ipe_policy *)root->i_private;
 	if (!old)
@@ -104,15 +105,11 @@ int ipe_update_policy(struct inode *root, const char *text, size_t textlen,
 	if (IS_ERR(new))
 		return PTR_ERR(new);
 
-	if (strcmp(new->parsed->name, old->parsed->name)) {
-		rc = -EINVAL;
-		goto err;
-	}
+	if (strcmp(new->parsed->name, old->parsed->name))
+		return -EINVAL;
 
-	if (ver_to_u64(old) >= ver_to_u64(new)) {
-		rc = -ESTALE;
-		goto err;
-	}
+	if (ver_to_u64(old) >= ver_to_u64(new))
+		return -ESTALE;
 
 	root->i_private = new;
 	swap(new->policyfs, old->policyfs);
@@ -130,11 +127,9 @@ int ipe_update_policy(struct inode *root, const char *text, size_t textlen,
 	}
 	synchronize_rcu();
 	ipe_free_policy(old);
+	retain_and_null_ptr(new);
 
 	return 0;
-err:
-	ipe_free_policy(new);
-	return rc;
 }
 
 /**
@@ -159,20 +154,17 @@ err:
 struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 				  const char *pkcs7, size_t pkcs7len)
 {
-	struct ipe_policy *new = NULL;
+	struct ipe_policy *new __free(ipe_free_policy) = kzalloc_obj(*new);
 	int rc = 0;
 
-	new = kzalloc_obj(*new);
 	if (!new)
 		return ERR_PTR(-ENOMEM);
 
 	if (!text) {
 		new->pkcs7len = pkcs7len;
 		new->pkcs7 = kmemdup(pkcs7, pkcs7len, GFP_KERNEL);
-		if (!new->pkcs7) {
-			rc = -ENOMEM;
-			goto err;
-		}
+		if (!new->pkcs7)
+			return ERR_PTR(-ENOMEM);
 
 		rc = verify_pkcs7_signature(NULL, 0, new->pkcs7, pkcs7len,
 #ifdef CONFIG_IPE_POLICY_SIG_SECONDARY_KEYRING
@@ -190,24 +182,19 @@ struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 						    set_pkcs7_data, new);
 #endif
 		if (rc)
-			goto err;
+			return ERR_PTR(rc);
 	} else {
 		new->textlen = textlen;
 		new->text = kstrdup(text, GFP_KERNEL);
-		if (!new->text) {
-			rc = -ENOMEM;
-			goto err;
-		}
+		if (!new->text)
+			return ERR_PTR(-ENOMEM);
 	}
 
 	rc = ipe_parse_policy(new);
 	if (rc)
-		goto err;
+		return ERR_PTR(rc);
 
-	return new;
-err:
-	ipe_free_policy(new);
-	return ERR_PTR(rc);
+	return_ptr(new);
 }
 
 /**

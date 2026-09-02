@@ -299,19 +299,20 @@ static ssize_t update_policy(struct file *f, const char __user *data,
 			     size_t len, loff_t *offset)
 {
 	struct inode *root = NULL;
-	char *copy = NULL;
+	char *copy __free(kfree) = NULL;
 	int rc = 0;
 
 	if (!file_ns_capable(f, &init_user_ns, CAP_MAC_ADMIN)) {
-		rc = -EPERM;
-		goto out;
+		ipe_audit_policy_load(ERR_PTR(-EPERM));
+		return -EPERM;
 	}
 
 	copy = memdup_user(data, len);
 	if (IS_ERR(copy)) {
 		rc = PTR_ERR(copy);
 		copy = NULL;
-		goto out;
+		ipe_audit_policy_load(ERR_PTR(rc));
+		return rc;
 	}
 
 	root = d_inode(f->f_path.dentry->d_parent);
@@ -319,8 +320,6 @@ static ssize_t update_policy(struct file *f, const char __user *data,
 	rc = ipe_update_policy(root, NULL, 0, copy, len);
 	inode_unlock(root);
 
-out:
-	kfree(copy);
 	if (rc) {
 		ipe_audit_policy_load(ERR_PTR(rc));
 		return rc;

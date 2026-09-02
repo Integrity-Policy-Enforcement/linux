@@ -5,6 +5,7 @@
 #ifndef _IPE_POLICY_H
 #define _IPE_POLICY_H
 
+#include <linux/cleanup.h>
 #include <linux/list.h>
 #include <linux/types.h>
 #include <linux/fs.h>
@@ -90,6 +91,8 @@ struct ipe_policy {
 struct ipe_policy *ipe_new_policy(const char *text, size_t textlen,
 				  const char *pkcs7, size_t pkcs7len);
 void ipe_free_policy(struct ipe_policy *pol);
+DEFINE_FREE(ipe_free_policy, struct ipe_policy *, ipe_free_policy(_T))
+
 int ipe_update_policy(struct inode *root, const char *text, size_t textlen,
 		      const char *pkcs7, size_t pkcs7len);
 int ipe_set_active_pol(const struct ipe_policy *p);

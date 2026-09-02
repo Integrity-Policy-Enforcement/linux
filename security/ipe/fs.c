@@ -136,41 +136,40 @@ static ssize_t getenforce(struct file *f, char __user *data,
 static ssize_t new_policy(struct file *f, const char __user *data,
 			  size_t len, loff_t *offset)
 {
-	struct ipe_policy *p = NULL;
-	char *copy = NULL;
+	struct ipe_policy *p __free(ipe_free_policy) = NULL;
+	char *copy __free(kfree) = NULL;
 	int rc = 0;
 
 	if (!file_ns_capable(f, &init_user_ns, CAP_MAC_ADMIN)) {
-		rc = -EPERM;
-		goto out;
+		ipe_audit_policy_load(ERR_PTR(-EPERM));
+		return -EPERM;
 	}
 
 	copy = memdup_user_nul(data, len);
 	if (IS_ERR(copy)) {
 		rc = PTR_ERR(copy);
 		copy = NULL;
-		goto out;
+		ipe_audit_policy_load(ERR_PTR(rc));
+		return rc;
 	}
 
 	p = ipe_new_policy(NULL, 0, copy, len);
 	if (IS_ERR(p)) {
 		rc = PTR_ERR(p);
-		goto out;
+		ipe_audit_policy_load(ERR_PTR(rc));
+		return rc;
 	}
 
 	rc = ipe_new_policyfs_node(p);
-	if (rc)
-		goto out;
-
-out:
-	kfree(copy);
-	if (rc < 0) {
-		ipe_free_policy(p);
+	if (rc) {
 		ipe_audit_policy_load(ERR_PTR(rc));
-	} else {
-		ipe_audit_policy_load(p);
+		return rc;
 	}
-	return (rc < 0) ? rc : len;
+
+	ipe_audit_policy_load(p);
+	retain_and_null_ptr(p);
+
+	return len;
 }
 
 static const struct file_operations np_fops = {

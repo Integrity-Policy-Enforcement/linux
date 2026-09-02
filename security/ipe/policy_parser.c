@@ -129,6 +129,8 @@ static const match_table_t header_tokens = {
 	{__IPE_HEADER_MAX,		NULL}
 };
 
+static_assert(ARRAY_SIZE(header_tokens) == __IPE_HEADER_MAX + 1);
+
 /**
  * parse_header() - Parse policy header information.
  * @line: Supplies header line to be parsed.
@@ -247,6 +249,8 @@ static const match_table_t operation_tokens = {
 	{IPE_OP_INVALID,		NULL}
 };
 
+static_assert(ARRAY_SIZE(operation_tokens) == __IPE_OP_MAX + 1);
+
 /**
  * parse_operation() - Parse the operation type given a token string.
  * @t: Supplies the token string to be parsed.
@@ -265,6 +269,8 @@ static const match_table_t action_tokens = {
 	{IPE_ACTION_DENY,	"action=DENY"},
 	{IPE_ACTION_INVALID,	NULL}
 };
+
+static_assert(ARRAY_SIZE(action_tokens) == __IPE_ACTION_MAX + 1);
 
 /**
  * parse_action() - Parse the action type given a token string.
@@ -290,6 +296,8 @@ static const match_table_t property_tokens = {
 	{IPE_PROP_FSV_SIG_TRUE,		"fsverity_signature=TRUE"},
 	{IPE_PROP_INVALID,		NULL}
 };
+
+static_assert(ARRAY_SIZE(property_tokens) == __IPE_PROP_MAX + 1);
 
 /**
  * parse_property() - Parse a rule property given a token string.

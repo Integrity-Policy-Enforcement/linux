@@ -3,8 +3,11 @@
  * Copyright (C) 2020-2024 Microsoft Corporation. All rights reserved.
  */
 
+#include <linux/cleanup.h>
 #include <linux/hex.h>
 #include "digest.h"
+
+DEFINE_FREE(ipe_digest_free, struct digest_info *, ipe_digest_free(_T))
 
 /**
  * ipe_digest_parse() - parse a digest in IPE's policy.
@@ -22,54 +25,32 @@
  */
 struct digest_info *ipe_digest_parse(const char *valstr)
 {
-	struct digest_info *info = NULL;
+	struct digest_info *info __free(ipe_digest_free) = kzalloc_obj(*info);
 	char *sep, *raw_digest;
-	size_t raw_digest_len;
 	u8 *digest = NULL;
-	char *alg = NULL;
-	int rc = 0;
 
-	info = kzalloc_obj(*info);
 	if (!info)
 		return ERR_PTR(-ENOMEM);
 
 	sep = strchr(valstr, ':');
-	if (!sep) {
-		rc = -EBADMSG;
-		goto err;
-	}
+	if (!sep)
+		return ERR_PTR(-EBADMSG);
 
-	alg = kstrndup(valstr, sep - valstr, GFP_KERNEL);
-	if (!alg) {
-		rc = -ENOMEM;
-		goto err;
-	}
+	info->alg = kstrndup(valstr, sep - valstr, GFP_KERNEL);
+	if (!info->alg)
+		return ERR_PTR(-ENOMEM);
 
 	raw_digest = sep + 1;
-	raw_digest_len = strlen(raw_digest);
-
-	info->digest_len = (raw_digest_len + 1) / 2;
+	info->digest_len = (strlen(raw_digest) + 1) / 2;
 	digest = kzalloc(info->digest_len, GFP_KERNEL);
-	if (!digest) {
-		rc = -ENOMEM;
-		goto err;
-	}
-
-	rc = hex2bin(digest, raw_digest, info->digest_len);
-	if (rc < 0) {
-		rc = -EINVAL;
-		goto err;
-	}
-
-	info->alg = alg;
+	if (!digest)
+		return ERR_PTR(-ENOMEM);
 	info->digest = digest;
-	return info;
 
-err:
-	kfree(alg);
-	kfree(digest);
-	kfree(info);
-	return ERR_PTR(rc);
+	if (hex2bin(digest, raw_digest, info->digest_len) < 0)
+		return ERR_PTR(-EINVAL);
+
+	return_ptr(info);
 }
 
 /**
@@ -84,28 +65,22 @@ err:
 struct digest_info *ipe_digest_new(const char *alg, const u8 *digest,
 				   size_t digest_len)
 {
-	struct digest_info *info = NULL;
+	struct digest_info *info __free(ipe_digest_free) = kzalloc_obj(*info);
 
-	info = kzalloc_obj(*info);
 	if (!info)
 		return ERR_PTR(-ENOMEM);
 
 	info->digest = kmemdup(digest, digest_len, GFP_KERNEL);
 	if (!info->digest)
-		goto err;
+		return ERR_PTR(-ENOMEM);
 
 	info->alg = kstrdup(alg, GFP_KERNEL);
 	if (!info->alg)
-		goto err;
+		return ERR_PTR(-ENOMEM);
 
 	info->digest_len = digest_len;
 
-	return info;
-
-err:
-	ipe_digest_free(info);
-
-	return ERR_PTR(-ENOMEM);
+	return_ptr(info);
 }
 
 /**

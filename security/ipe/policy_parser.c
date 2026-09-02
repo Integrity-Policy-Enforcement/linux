@@ -3,6 +3,7 @@
  * Copyright (C) 2020-2024 Microsoft Corporation. All rights reserved.
  */
 
+#include <linux/cleanup.h>
 #include <linux/err.h>
 #include <linux/slab.h>
 #include <linux/parser.h>
@@ -142,8 +143,8 @@ static const match_table_t header_tokens = {
  */
 static int parse_header(char *line, struct ipe_parsed_policy *p)
 {
+	char *t, *ver __free(kfree) = NULL;
 	substring_t args[MAX_OPT_ARGS];
-	char *t, *ver = NULL;
 	size_t idx = 0;
 	int rc = 0;
 
@@ -152,16 +153,12 @@ static int parse_header(char *line, struct ipe_parsed_policy *p)
 
 		if (*t == '\0')
 			continue;
-		if (idx >= __IPE_HEADER_MAX) {
-			rc = -EBADMSG;
-			goto out;
-		}
+		if (idx >= __IPE_HEADER_MAX)
+			return -EBADMSG;
 
 		token = match_token(t, header_tokens, args);
-		if (token != idx) {
-			rc = -EBADMSG;
-			goto out;
-		}
+		if (token != idx)
+			return -EBADMSG;
 
 		switch (token) {
 		case IPE_HEADER_POLICY_NAME:
@@ -181,16 +178,14 @@ static int parse_header(char *line, struct ipe_parsed_policy *p)
 			rc = -EBADMSG;
 		}
 		if (rc)
-			goto out;
+			return rc;
 		++idx;
 	}
 
 	if (idx != __IPE_HEADER_MAX)
-		rc = -EBADMSG;
+		return -EBADMSG;
 
-out:
-	kfree(ver);
-	return rc;
+	return 0;
 }
 
 /**
@@ -205,6 +200,17 @@ static bool token_default(char *token)
 {
 	return !strcmp(token, "DEFAULT");
 }
+
+static void free_prop(struct ipe_prop *p)
+{
+	if (IS_ERR_OR_NULL(p))
+		return;
+
+	ipe_digest_free(p->value);
+	kfree(p);
+}
+
+DEFINE_FREE(free_prop, struct ipe_prop *, free_prop(_T))
 
 /**
  * free_rule() - Free the supplied ipe_rule struct.
@@ -222,12 +228,13 @@ static void free_rule(struct ipe_rule *r)
 
 	list_for_each_entry_safe(p, t, &r->props, next) {
 		list_del(&p->next);
-		ipe_digest_free(p->value);
-		kfree(p);
+		free_prop(p);
 	}
 
 	kfree(r);
 }
+
+DEFINE_FREE(free_rule, struct ipe_rule *, free_rule(_T))
 
 static const match_table_t operation_tokens = {
 	{IPE_OP_EXEC,			"op=EXECUTE"},
@@ -299,13 +306,11 @@ static const match_table_t property_tokens = {
  */
 static int parse_property(char *t, struct ipe_rule *r)
 {
+	struct ipe_prop *p __free(free_prop) = kzalloc_obj(*p);
+	char *dup __free(kfree) = NULL;
 	substring_t args[MAX_OPT_ARGS];
-	struct ipe_prop *p = NULL;
-	int rc = 0;
 	int token;
-	char *dup = NULL;
 
-	p = kzalloc_obj(*p);
 	if (!p)
 		return -ENOMEM;
 
@@ -315,15 +320,12 @@ static int parse_property(char *t, struct ipe_rule *r)
 	case IPE_PROP_DMV_ROOTHASH:
 	case IPE_PROP_FSV_DIGEST:
 		dup = match_strdup(&args[0]);
-		if (!dup) {
-			rc = -ENOMEM;
-			goto err;
-		}
+		if (!dup)
+			return -ENOMEM;
+
 		p->value = ipe_digest_parse(dup);
-		if (IS_ERR(p->value)) {
-			rc = PTR_ERR(p->value);
-			goto err;
-		}
+		if (IS_ERR(p->value))
+			return PTR_ERR(p->value);
 		fallthrough;
 	case IPE_PROP_BOOT_VERIFIED_FALSE:
 	case IPE_PROP_BOOT_VERIFIED_TRUE:
@@ -334,19 +336,13 @@ static int parse_property(char *t, struct ipe_rule *r)
 		p->type = token;
 		break;
 	default:
-		rc = -EBADMSG;
-		break;
+		return -EBADMSG;
 	}
-	if (rc)
-		goto err;
-	list_add_tail(&p->next, &r->props);
 
-out:
-	kfree(dup);
-	return rc;
-err:
-	kfree(p);
-	goto out;
+	list_add_tail(&p->next, &r->props);
+	retain_and_null_ptr(p);
+
+	return 0;
 }
 
 /**
@@ -362,9 +358,9 @@ err:
 static int parse_rule(char *line, struct ipe_parsed_policy *p)
 {
 	enum ipe_action_type action = IPE_ACTION_INVALID;
+	struct ipe_rule *r __free(free_rule) = NULL;
 	enum ipe_op_type op = IPE_OP_INVALID;
 	bool is_default_rule = false;
-	struct ipe_rule *r = NULL;
 	bool first_token = true;
 	bool op_parsed = false;
 	int rc = 0;
@@ -398,15 +394,13 @@ static int parse_rule(char *line, struct ipe_parsed_policy *p)
 		}
 
 		if (rc)
-			goto err;
+			return rc;
 		first_token = false;
 	}
 
 	action = parse_action(t);
-	if (action == IPE_ACTION_INVALID) {
-		rc = -EBADMSG;
-		goto err;
-	}
+	if (action == IPE_ACTION_INVALID)
+		return -EBADMSG;
 
 	if (is_default_rule) {
 		if (!list_empty(&r->props)) {
@@ -430,16 +424,13 @@ static int parse_rule(char *line, struct ipe_parsed_policy *p)
 	}
 
 	if (rc)
-		goto err;
-	if (!is_default_rule)
+		return rc;
+	if (!is_default_rule) {
 		list_add_tail(&r->next, &p->rules[op].rules);
-	else
-		free_rule(r);
+		retain_and_null_ptr(r);
+	}
 
-	return rc;
-err:
-	free_rule(r);
-	return rc;
+	return 0;
 }
 
 /**
@@ -463,6 +454,9 @@ void ipe_free_parsed_policy(struct ipe_parsed_policy *p)
 	kfree(p->name);
 	kfree(p);
 }
+
+DEFINE_FREE(ipe_free_parsed_policy, struct ipe_parsed_policy *,
+	    ipe_free_parsed_policy(_T))
 
 /**
  * validate_policy() - validate a parsed policy.
@@ -504,56 +498,45 @@ static int validate_policy(const struct ipe_parsed_policy *p)
  */
 int ipe_parse_policy(struct ipe_policy *p)
 {
-	struct ipe_parsed_policy *pp = NULL;
-	char *policy = NULL, *dup = NULL;
+	struct ipe_parsed_policy *pp __free(ipe_free_parsed_policy) = NULL;
+	char *policy = NULL, *dup __free(kfree) = NULL;
 	bool header_parsed = false;
 	char *line = NULL;
-	size_t len;
 	int rc = 0;
 
 	if (!p->textlen)
 		return -EBADMSG;
 
-	policy = kmemdup_nul(p->text, p->textlen, GFP_KERNEL);
-	if (!policy)
+	dup = kmemdup_nul(p->text, p->textlen, GFP_KERNEL);
+	if (!dup)
 		return -ENOMEM;
-	dup = policy;
+	policy = dup;
 
 	pp = new_parsed_policy();
-	if (IS_ERR(pp)) {
-		rc = PTR_ERR(pp);
-		goto out;
-	}
+	if (IS_ERR(pp))
+		return PTR_ERR(pp);
 
 	while ((line = strsep(&policy, IPE_LINE_DELIM)) != NULL) {
 		remove_comment(line);
-		len = remove_trailing_spaces(line);
-		if (!len)
+		if (!remove_trailing_spaces(line))
 			continue;
 
 		if (!header_parsed) {
 			rc = parse_header(line, pp);
 			if (rc)
-				goto err;
+				return rc;
 			header_parsed = true;
 		} else {
 			rc = parse_rule(line, pp);
 			if (rc)
-				goto err;
+				return rc;
 		}
 	}
 
-	if (!header_parsed || validate_policy(pp)) {
-		rc = -EBADMSG;
-		goto err;
-	}
+	if (!header_parsed || validate_policy(pp))
+		return -EBADMSG;
 
-	p->parsed = pp;
+	p->parsed = no_free_ptr(pp);
 
-out:
-	kfree(dup);
-	return rc;
-err:
-	ipe_free_parsed_policy(pp);
-	goto out;
+	return 0;
 }

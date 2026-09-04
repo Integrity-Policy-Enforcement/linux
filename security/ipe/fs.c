@@ -12,7 +12,6 @@
 #include "policy.h"
 #include "audit.h"
 
-static struct dentry *root __ro_after_init;
 struct dentry *policy_root __ro_after_init;
 
 /**
@@ -194,9 +193,10 @@ static const struct file_operations enforce_fops = {
  */
 int __init ipe_init_securityfs(void)
 {
-	int rc = 0;
+	struct dentry *root __free(securityfs_remove) = NULL;
 	struct ipe_policy *ap;
 	struct dentry *dentry;
+	int rc = 0;
 
 	if (!ipe_enabled)
 		return -EOPNOTSUPP;
@@ -207,39 +207,29 @@ int __init ipe_init_securityfs(void)
 
 	dentry = securityfs_create_file("success_audit", 0600, root,
 					    NULL, &audit_fops);
-	if (IS_ERR(dentry)) {
-		rc = PTR_ERR(dentry);
-		goto err;
-	}
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
 
 	dentry = securityfs_create_file("enforce", 0600, root, NULL,
 					      &enforce_fops);
-	if (IS_ERR(dentry)) {
-		rc = PTR_ERR(dentry);
-		goto err;
-	}
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
 
 	policy_root = securityfs_create_dir("policies", root);
-	if (IS_ERR(policy_root)) {
-		rc = PTR_ERR(policy_root);
-		goto err;
-	}
+	if (IS_ERR(policy_root))
+		return PTR_ERR(policy_root);
 
 	ap = rcu_access_pointer(ipe_active_policy);
 	if (ap) {
 		rc = ipe_new_policyfs_node(ap);
 		if (rc)
-			goto err;
+			return rc;
 	}
 
 	dentry = securityfs_create_file("new_policy", 0200, root, NULL, &np_fops);
-	if (IS_ERR(dentry)) {
-		rc = PTR_ERR(dentry);
-		goto err;
-	}
+	if (IS_ERR(dentry))
+		return PTR_ERR(dentry);
 
+	retain_and_null_ptr(root);
 	return 0;
-err:
-	securityfs_remove(root);
-	return rc;
 }

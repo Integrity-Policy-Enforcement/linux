@@ -450,12 +450,11 @@ void ipe_del_policyfs_node(struct ipe_policy *p)
  */
 int ipe_new_policyfs_node(struct ipe_policy *p)
 {
+	struct dentry *policyfs __free(securityfs_remove) = NULL;
 	const struct ipefs_file *f = NULL;
-	struct dentry *policyfs = NULL;
 	struct inode *root = NULL;
 	struct dentry *d = NULL;
 	size_t i = 0;
-	int rc = 0;
 
 	if (p->policyfs)
 		return 0;
@@ -471,10 +470,8 @@ int ipe_new_policyfs_node(struct ipe_policy *p)
 
 		d = securityfs_create_file(f->name, f->access, policyfs,
 					   NULL, f->fops);
-		if (IS_ERR(d)) {
-			rc = PTR_ERR(d);
-			goto err;
-		}
+		if (IS_ERR(d))
+			return PTR_ERR(d);
 	}
 
 	inode_lock(root);
@@ -482,8 +479,6 @@ int ipe_new_policyfs_node(struct ipe_policy *p)
 	root->i_private = p;
 	inode_unlock(root);
 
+	retain_and_null_ptr(policyfs);
 	return 0;
-err:
-	securityfs_remove(policyfs);
-	return rc;
 }

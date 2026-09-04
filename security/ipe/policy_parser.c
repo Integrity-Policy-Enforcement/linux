@@ -424,7 +424,7 @@ static int parse_rule(char *line, struct ipe_parsed_policy *p)
 			else
 				p->rules[op].default_action = action;
 		}
-	} else if (op != IPE_OP_INVALID && action != IPE_ACTION_INVALID) {
+	} else if (op != IPE_OP_INVALID) {
 		r->op = op;
 		r->action = action;
 	} else {

@@ -23,6 +23,7 @@
 #ifndef __LINUX_SECURITY_H
 #define __LINUX_SECURITY_H
 
+#include <linux/cleanup.h>
 #include <linux/kernel_read_file.h>
 #include <linux/key.h>
 #include <linux/capability.h>
@@ -2291,6 +2292,8 @@ static inline void securityfs_remove(struct dentry *dentry)
 {}
 
 #endif
+
+DEFINE_FREE(securityfs_remove, struct dentry *, securityfs_remove(_T))
 
 #ifdef CONFIG_BPF_SYSCALL
 union bpf_attr;
